@@ -73,9 +73,9 @@ def get_refined_delinquencies():
     active_delinquencies.to_csv(data_dir + 'debtbyage_20181205_REFINED.csv')
     
     #test delinquency filtering
-    print(delinquency_data.grouby('Violator Type').agg('count'))
-    print(delinquency_data.grouby('Age Category').agg('count'))
-    print(delinquency_data.grouby('Delinquent Type').agg('count'))
+    print(delinquency_data.groupby('Violator Type').agg('count'))
+    print(delinquency_data.groupby('Age Category').agg('count'))
+    print(delinquency_data.groupby('Delinquent Type').agg('count'))
 
 # There's an issue with the ai_narr column and double quotes, as in "He fell off
 # of a 6" ledge..." Removing that column because it breaks everything.    
@@ -98,9 +98,6 @@ def segment_accidents():
 #################################################################    
     
 delinquency_data = pd.read_csv(data_dir + 'debtbyage_20181205_REFINED.csv')
-print(delinquency_data.grouby('Violator Type').agg('count'))
-print(delinquency_data.grouby('Age Category').agg('count'))
-print(delinquency_data.grouby('Delinquent Type').agg('count'))
 
 def get_delinquent_mines():    
     return delinquency_data['Mine ID'].unique()
