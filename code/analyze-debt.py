@@ -35,19 +35,11 @@ import datetime, glob, os
 data_dir = '../data/'
 now = datetime.datetime.now()
 
-#accident_data = pd.read_csv(data_dir + 'msha_accident_20181229-0.csv')
-#violation_data = pd.read_csv(data_dir + 'msha_violations_20181229_y15_y18.csv')
-
-# Compare injury rates at delinquent and non-delinquent mines,
-# include delinquent mines pre delinquency in non-delinquent category
 
 #################################################################
 # HELPER FUNTIONS
 #################################################################
 
-def question_data():
-    print(delinquency_data['Delinquent Date'].min())
-    print(delinquency_data['Delinquent Date'].max())
     
 def combine_segment_violations():
     #combine
@@ -59,6 +51,10 @@ def combine_segment_violations():
     #segment by date
     rel_violations = all_violations[(all_violations['mine_id'] == 1512685) | (all_violations['iss_dt'] > '1993-12-31')]
     rel_violations.to_csv(data_dir + 'msha_violations_20181229_y94_y18.csv')
+    
+    #test date segmentation
+    print(rel_violations.iss_dt.min())
+    print(rel_violations.iss_dt.max())
 
 def get_refined_delinquencies():
     delinquency_data = pd.read_csv(data_dir + 'DEBTAGE12052018_DET2.csv')
@@ -75,6 +71,11 @@ def get_refined_delinquencies():
     active_delinquencies = aged_delinquencies[~aged_delinquencies['Delinquent Type'].isin(remove_types)]
     
     active_delinquencies.to_csv(data_dir + 'debtbyage_20181205_REFINED.csv')
+    
+    #test delinquency filtering
+    print(delinquency_data.grouby('Violator Type').agg('count'))
+    print(delinquency_data.grouby('Age Category').agg('count'))
+    print(delinquency_data.grouby('Delinquent Type').agg('count'))
 
 # There's an issue with the ai_narr column and double quotes, as in "He fell off
 # of a 6" ledge..." Removing that column because it breaks everything.    
@@ -89,10 +90,17 @@ def segment_accidents():
     rel_accidents = accident_data[(accident_data['mine_id'] == 1512685) | (accident_data['ai_dt'] > '1993-12-31')]
     rel_accidents.to_csv(data_dir + 'msha_accident_20181229_y94_y18.csv')
     
+    #test date segmentation
+    print(rel_accidents.ai_dt.min())
+    print(rel_accidents.ai_dt.max())
+    
     
 #################################################################    
     
 delinquency_data = pd.read_csv(data_dir + 'debtbyage_20181205_REFINED.csv')
+print(delinquency_data.grouby('Violator Type').agg('count'))
+print(delinquency_data.grouby('Age Category').agg('count'))
+print(delinquency_data.grouby('Delinquent Type').agg('count'))
 
 def get_delinquent_mines():    
     return delinquency_data['Mine ID'].unique()
@@ -148,7 +156,7 @@ def get_violations():
             
 #segment_accidents()           
 #injury_rates()  
-get_violations()
+#get_violations()
 #combine_segment_violations()
     
     
