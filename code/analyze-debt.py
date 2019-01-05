@@ -136,32 +136,40 @@ def get_delinquent_mine_dates():
 
 def injury_rates():
     accident_data = pd.read_csv(data_dir + 'msha_accident_20181229_y94_y18.csv', escapechar='\\')
-    #oprtr_hrs_data = pd.read_csv(data_dir + 'msha_cy_oprtr_emplymnt_20181229-0.csv')
+    oprtr_hrs_data = pd.read_csv(data_dir + 'msha_cy_oprtr_emplymnt_20181229-0.csv')
+    inj_data = accident_data[accident_data.no_injuries > 0]
     
-    #print(accident_data.info())
-        
-    injury_data = accident_data[accident_data.no_injuries > 0]
+    inj_mine_year = pd.pivot_table(inj_data, values='document_no', index=['mine_id'], columns='cal_yr', aggfunc='count')
+    hrs_mine_year = pd.pivot_table(oprtr_hrs_data, values='annual_hrs', index=['mine_id'], columns='calendar_yr', aggfunc=np.sum)
     
-    delinquent_mines = get_delinquent_mines() #['mine_id','mine_id','mine_id'...]
-    delinquent_mine_dates = get_delinquent_mine_dates() #{'mine_id':'delinquncy_start','mine_id':'delinquncy_start',...}
+    inj_hrs_mine_year = pd.merge(inj_mine_year, hrs_mine_year, on='mine_id', suffixes=('_inj', '_hrs'))
     
-    is_delinquent = injury_data['mine_id'].isin(delinquent_mines)
-    in_timeframe = injury_data['ai_year'] >= injury_data['mine_id'].map(delinquent_mine_dates)
+    def calc_injury_rate(inj, hrs):
+        return (inj / (hrs / 2000)) * 100
     
-    delinquent_accident = injury_data[is_delinquent & in_timeframe]
-    non_delinquent_accident = injury_data[(is_delinquent & ~in_timeframe) | ~is_delinquent]
+    inj_hrs_mine_year['1994_FTE'] = np.vectorize(calc_injury_rate)(inj_hrs_mine_year['1994_inj'], inj_hrs_mine_year['1994_hrs'])
+    inj_hrs_mine_year['1995_FTE'] = np.vectorize(calc_injury_rate)(inj_hrs_mine_year['1995_inj'], inj_hrs_mine_year['1995_hrs'])
+    inj_hrs_mine_year['1996_FTE'] = np.vectorize(calc_injury_rate)(inj_hrs_mine_year['1996_inj'], inj_hrs_mine_year['1996_hrs'])
+    inj_hrs_mine_year['1997_FTE'] = np.vectorize(calc_injury_rate)(inj_hrs_mine_year['1997_inj'], inj_hrs_mine_year['1997_hrs'])
+    inj_hrs_mine_year['1998_FTE'] = np.vectorize(calc_injury_rate)(inj_hrs_mine_year['1998_inj'], inj_hrs_mine_year['1998_hrs'])
     
-    #del_acc_by_mine_series = delinquent_accident.groupby('mine_id').agg('count')
-    #non_del_acc_by_mine_series = non_delinquent_accident.groupby('mine_id').agg('count')
+    
+    inj_hrs_mine_year.to_csv(data_dir + 'test/inj-hrs-mine-year.csv')
+    
+    #delinquent_mines = get_delinquent_mines() #['mine_id','mine_id','mine_id'...]
+    #delinquent_mine_dates = get_delinquent_mine_dates() #{'mine_id':'delinquncy_start','mine_id':'delinquncy_start',...}
     #
-    #del_acc_by_mine = pd.DataFrame({'mine_id':del_acc_by_mine_series.index, 'delinquent_accidents':del_acc_by_mine_series.values})
-    #del_acc_by_mine = pd.DataFrame({'mine_id':non_del_acc_by_mine_series.index, 'non_delinquent_accidents':non_del_acc_by_mine_series.values})
-    
-    del_acc_by_mine_year = pd.pivot_table(delinquent_accident, values='document_no', index=['mine_id'], columns='cal_yr', aggfunc='count')
-    non_del_acc_by_mine_year = pd.pivot_table(non_delinquent_accident, values='document_no', index=['mine_id'], columns='cal_yr', aggfunc='count')
-    
-    del_acc_by_mine_year.to_csv(data_dir + 'test/delinquent-accidents-year.csv')
-    non_del_acc_by_mine_year.to_csv(data_dir + 'test/non-delinquent-accidents-year.csv')
+    #is_delinquent = inj_data['mine_id'].isin(delinquent_mines)
+    #in_timeframe = inj_data['ai_year'] >= injury_data['mine_id'].map(delinquent_mine_dates)
+    #
+    #delinquent_inj = inj_data[is_delinquent & in_timeframe]
+    #non_delinquent_inj = inj_data[(is_delinquent & ~in_timeframe) | ~is_delinquent]
+    #
+    #del_inj_by_mine_year = pd.pivot_table(delinquent_inj, values='document_no', index=['mine_id'], columns='cal_yr', aggfunc='count')
+    #non_inj_acc_by_mine_year = pd.pivot_table(non_delinquent_inj, values='document_no', index=['mine_id'], columns='cal_yr', aggfunc='count')
+    #
+    #del_inj_by_mine_year.to_csv(data_dir + 'test/delinquent-inj-year.csv')
+    #non_inj_acc_by_mine_year.to_csv(data_dir + 'test/non-delinquent-inj-year.csv')
     
     # Note here that my count of injuries at delinquent mines since 1994 is very similar to what NPR got in 2014: 
     # - this analysis: 3,868
