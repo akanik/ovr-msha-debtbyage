@@ -96,10 +96,18 @@ def segment_accidents():
     print(rel_accidents.ai_dt.max())
     
     
-#################################################################    
+def segment_hrs():  
+       
+    hrs_data = pd.read_csv(data_dir + 'msha_cy_oprtr_emplymnt_20181229-0.csv')
     
-delinquency_data = pd.read_csv(data_dir + 'debtbyage_20181205_REFINED.csv')
-
+    rel_hrs = hrs_data[hrs_data['calendar_yr'] > 1993]
+    rel_hrs.to_csv(data_dir + 'msha_cy_oprtr_emplymnt_20181229_y94_y18.csv')
+    
+    #test date segmentation
+    print(rel_hrs.calendar_yr.min())
+    print(rel_hrs.calendar_yr.max())
+    
+    
 def test_oprtr_data():
     oprtr_hrs_data = pd.read_csv(data_dir + 'msha_cy_oprtr_emplymnt_20181229-0.csv')
     
@@ -111,52 +119,112 @@ def test_oprtr_data():
     mine_list=list(mine_dict.values())
     print(mine_list[0])    
     #by_mine_id.to_csv(data_dir + 'test/oprtr-mine-id-test.csv')
+    
+    
+#################################################################    
+    
+delinquency_data = pd.read_csv(data_dir + 'debtbyage_20181205_REFINED.csv')
+delinquency_data['Delinquent Date'] =  pd.to_datetime(delinquency_data['Delinquent Date'], format='%m/%d/%Y')
 
-
-def get_delinquent_mines():    
+#Create a unique list of currently delinquent mines
+def get_delinquent_mines():
     return delinquency_data['Mine ID'].unique()
 
+#Create a unique list of mines that have been delinquent since the year passed to this function
+def get_delinquent_since(year): 
+    earliest_series = delinquency_data.groupby('Mine ID')['Delinquent Date'].agg('min')
     
-# 60% of mines have more than one active delinquency. Grab the earliest Delinquent Date    
+    earliest_df = pd.DataFrame({'mine_id':earliest_series.index, 'earliest_date':earliest_series.values})
+    
+    #Need to round earliest_date up to the next year so we can factor only years with full delinquency
+    earliest_df['earliest_year'] = earliest_df['earliest_date'].map(lambda x: x.year+1)
+    
+    delinquent_since = earliest_df[earliest_df['earliest_year'] <= year]
+        
+    return delinquent_since['mine_id'].unique()
+
+    
+#60% of mines have more than one active delinquency. 
+#Create a dataframe with unique mine_ids and the earliest delinquency date on record
 def get_delinquent_mine_dates():
     earliest_series = delinquency_data.groupby('Mine ID')['Delinquent Date'].agg('min')
     
     earliest_df = pd.DataFrame({'mine_id':earliest_series.index, 'earliest_date':earliest_series.values})
-    earliest_df['earliest_date'] =  pd.to_datetime(earliest_df['earliest_date'], format='%m/%d/%Y')
     
     #Need to round earliest_date up to the next year so we can factor only years with full delinquency
     earliest_df['earliest_year'] = earliest_df['earliest_date'].map(lambda x: x.year+1)
-    delinquency_refined = earliest_df[['mine_id','earliest_year']]
-    delinquency_dict = delinquency_refined.set_index('mine_id').to_dict()
     
-    return delinquency_dict['earliest_year']
-    
-    #return delinquency_dict['earliest_year']
-    
+    return earliest_df
+            
 
 def injury_rates():
+    oprtr_hrs_data = pd.read_csv(data_dir + 'msha_cy_oprtr_emplymnt_20181229_y94_y18.csv')
     accident_data = pd.read_csv(data_dir + 'msha_accident_20181229_y94_y18.csv', escapechar='\\')
-    oprtr_hrs_data = pd.read_csv(data_dir + 'msha_cy_oprtr_emplymnt_20181229-0.csv')
     inj_data = accident_data[accident_data.no_injuries > 0]
+    mine_delinquencies = get_delinquent_mine_dates()
     
-    inj_mine_year = pd.pivot_table(inj_data, values='document_no', index=['mine_id'], columns='cal_yr', aggfunc='count')
-    hrs_mine_year = pd.pivot_table(oprtr_hrs_data, values='annual_hrs', index=['mine_id'], columns='calendar_yr', aggfunc=np.sum)
+    hrs_mine_year = oprtr_hrs_data.groupby(['mine_id','calendar_yr'], as_index=False)['annual_hrs'].agg(np.sum)
+    hrs_mine_year = hrs_mine_year.rename(index=str, columns={'mine_id': 'mine_id', 'calendar_yr': 'cal_yr', 'annual_hrs':'annual_hrs'})
     
-    inj_hrs_mine_year = pd.merge(inj_mine_year, hrs_mine_year, on='mine_id', suffixes=('_inj', '_hrs'))
+    inj_mine_year = inj_data.groupby(['mine_id','cal_yr'], as_index=False)['document_no'].agg('count')
+    inj_mine_year = inj_mine_year.rename(index=str, columns={'mine_id': 'mine_id', 'cal_yr': 'cal_yr', 'document_no':'injuries'})
     
-    def calc_injury_rate(inj, hrs):
-        return (inj / (hrs / 2000)) * 100
+    hrs_inj_mine_year = pd.merge(hrs_mine_year, inj_mine_year, how='left', on=['mine_id','cal_yr'])
+    hrs_inj_del_mine_year = pd.merge(hrs_inj_mine_year, mine_delinquencies, how='left', on=['mine_id'])
     
-    inj_hrs_mine_year['1994_FTE'] = np.vectorize(calc_injury_rate)(inj_hrs_mine_year['1994_inj'], inj_hrs_mine_year['1994_hrs'])
-    inj_hrs_mine_year['1995_FTE'] = np.vectorize(calc_injury_rate)(inj_hrs_mine_year['1995_inj'], inj_hrs_mine_year['1995_hrs'])
-    inj_hrs_mine_year['1996_FTE'] = np.vectorize(calc_injury_rate)(inj_hrs_mine_year['1996_inj'], inj_hrs_mine_year['1996_hrs'])
-    inj_hrs_mine_year['1997_FTE'] = np.vectorize(calc_injury_rate)(inj_hrs_mine_year['1997_inj'], inj_hrs_mine_year['1997_hrs'])
-    inj_hrs_mine_year['1998_FTE'] = np.vectorize(calc_injury_rate)(inj_hrs_mine_year['1998_inj'], inj_hrs_mine_year['1998_hrs'])
+    #grouped = hrs_inj_del_mine_year.groupby(['mine_id'])['cal_yr'].agg('count')
+    #grouped.to_csv(data_dir + 'test/testing-mine-years.csv')
+    
+    def calc_injury_rate(row):
+        return (row['injuries'] / (row['annual_hrs'] / 2000)) * 100
+        
+    def find_rate_type(row):
+        if row['cal_yr'] >= row['earliest_year']:
+            return 'Delinquent'
+        else:
+            return 'Non-delinquent'
+            
+    delinquent_mines_since = get_delinquent_since(2014)
+    all_delinquent_mines = get_delinquent_mines()
+    
+    #These would be all mines that have been delinquent since 2014, with data for annual hours and number
+    #of injuries sustained by year
+    del_rates = hrs_inj_del_mine_year[hrs_inj_del_mine_year['mine_id'].isin(delinquent_mines_since)]
+    
+    #These would be all mines that are not currently delinquent. We do not have the data to state that they
+    #never were delinquent. Only that if they had a delinquency in the past 5 years, they have since paid it.
+    non_del_rates = hrs_inj_del_mine_year[~hrs_inj_del_mine_year['mine_id'].isin(all_delinquent_mines)]
+        
+    del_rates_year = del_rates.groupby(['cal_yr'])['injuries','annual_hrs'].agg(np.sum)
+    del_rates_year['injury_rate'] = del_rates_year.apply(calc_injury_rate, axis=1)
+    
+    non_del_rates_year = non_del_rates.groupby(['cal_yr'])['injuries','annual_hrs'].agg(np.sum)
+    non_del_rates_year['injury_rate'] = non_del_rates_year.apply(calc_injury_rate, axis=1)
+    
+    combo_rates = pd.merge(del_rates_year,non_del_rates_year, how='left', on='cal_yr', suffixes=('_del2014','_nondel2014'))
     
     
-    inj_hrs_mine_year.to_csv(data_dir + 'test/inj-hrs-mine-year.csv')
+    combo_rates.to_csv(data_dir + 'analysis/rates-del-nondel-since-2014.csv')
     
-    #delinquent_mines = get_delinquent_mines() #['mine_id','mine_id','mine_id'...]
+    
+    
+    
+    
+    
+    #del_rates.to_csv(data_dir + 'analysis/delinquent-mines-since-2014.csv')
+    #non_del_rates.to_csv(data_dir + 'analysis/non-delinquent-mines-since-2014.csv')
+        
+    #inj_hrs_del_mine_year['rate_type'] = inj_hrs_del_mine_year.apply(find_rate_type, axis=1)
+    #inj_hrs_del_mine_year['injury_rate'] = inj_hrs_del_mine_year.apply(calc_injury_rate, axis=1)
+    #
+    #avg_inj_rate = inj_hrs_del_mine_year.groupby(['rate_type'])['injury_rate'].median()
+    #
+    #print(avg_inj_rate)
+    #inj_hrs_del_mine_year.to_csv(data_dir + 'test/inj-hrs-del-mine-year.csv')
+    
+def get_mines_delinquent_since():
+    
+    delinquent_mines_since = get_delinquent_mines(2014) #['mine_id','mine_id','mine_id'...]
     #delinquent_mine_dates = get_delinquent_mine_dates() #{'mine_id':'delinquncy_start','mine_id':'delinquncy_start',...}
     #
     #is_delinquent = inj_data['mine_id'].isin(delinquent_mines)
@@ -210,7 +278,8 @@ def get_violations():
 
 #get_delinquent_mine_dates()
 #test_oprtr_data()            
-#segment_accidents()           
+#segment_accidents() 
+#segment_hrs()          
 injury_rates()  
 #get_violations()
 #combine_segment_violations()
