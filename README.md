@@ -1,4 +1,4 @@
-# ovr-msha-debtbyage: 
+# ovr-msha-debtbyage
 
 A repo that will run various data analyses on MSHA Debt by Age dataset
 
